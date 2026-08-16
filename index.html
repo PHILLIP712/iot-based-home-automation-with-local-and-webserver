@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Global Smart Hub</title>
+  <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+  <style>
+    * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    body { background: #f0f2f5; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; padding: 1rem; }
+    .card { background: #fff; width: 100%; max-width: 380px; padding: 2rem; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); text-align: center; }
+    .badge { display: inline-block; padding: 4px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: bold; margin-bottom: 1rem; }
+    .online { background: #d4edda; color: #155724; }
+    .offline { background: #f8d7da; color: #721c24; }
+    .master-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 1.2rem; }
+    .btn-m-on { background: #28a745; color: #fff; border: none; padding: 10px; border-radius: 6px; font-weight: bold; cursor: pointer; }
+    .btn-m-off { background: #dc3545; color: #fff; border: none; padding: 10px; border-radius: 6px; font-weight: bold; cursor: pointer; }
+    .relay-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .relay-box { background: #f8f9fa; border: 1px solid #e9ecef; border-radius: 8px; padding: 1rem; }
+    .relay-title { font-weight: bold; margin-bottom: 8px; font-size: 0.9rem; }
+    .btn { width: 100%; padding: 8px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; transition: 0.2s; }
+    .btn-off { background: #6c757d; color: #fff; }
+    .btn-on { background: #007bff; color: #fff; }
+    .btn-wait { background: #ffc107; color: #000; cursor: wait; }
+    #login-view input { width: 100%; padding: 12px; margin: 10px 0; border: 1px solid #ccc; border-radius: 6px; font-size: 1rem; }
+    #login-view button { width: 100%; padding: 12px; background: #007bff; color: #fff; border: none; border-radius: 6px; font-size: 1rem; font-weight: bold; cursor: pointer; }
+    .error-text { color: #dc3545; font-size: 0.85rem; margin-top: 8px; display: none; }
+  </style>
+</head>
+<body>
+
+  <div class="card">
+    <div id="login-view">
+      <h2>🔐 Secure Cloud Panel</h2>
+      <p style="color:#666; font-size:0.9rem;">Enter passcode to access worldwide.</p>
+      <input type="password" id="pass-input" placeholder="Passcode (Default: 1234567890)">
+      <button onclick="handleLogin()">Login</button>
+      <div id="login-error" class="error-text">Invalid Passcode!</div>
+    </div>
+
+    <div id="dashboard-view" style="display: none;">
+      <div style="display:flex; justify-content:space-between; align-items:center;">
+        <span id="hub-status" class="badge offline">Connecting...</span>
+        <button onclick="handleLogout()" style="background:none; border:none; color:#dc3545; cursor:pointer; font-size:0.8rem;">Logout</button>
+      </div>
+
+      <h2>Smart Hybrid Hub</h2>
+
+      <div class="master-grid">
+        <button class="btn-m-on" onclick="sendCmd('ALL_ON')">ALL ON</button>
+        <button class="btn-m-off" onclick="sendCmd('ALL_OFF')">ALL OFF</button>
+      </div>
+
+      <div class="relay-grid">
+        <div class="relay-box">
+          <div class="relay-title">💡 Light</div>
+          <button id="btn-0" class="btn btn-off" onclick="toggle(0)">OFF</button>
+        </div>
+        <div class="relay-box">
+          <div class="relay-title">🌀 Fan</div>
+          <button id="btn-1" class="btn btn-off" onclick="toggle(1)">OFF</button>
+        </div>
+        <div class="relay-box">
+          <div class="relay-title">📺 TV</div>
+          <button id="btn-2" class="btn btn-off" onclick="toggle(2)">OFF</button>
+        </div>
+        <div class="relay-box">
+          <div class="relay-title">🔌 Socket</div>
+          <button id="btn-3" class="btn btn-off" onclick="toggle(3)">OFF</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const DASHBOARD_PASSCODE = "1234567890";
+    const MQTT_HOST   = "wss://broker.hivemq.com:8884/mqtt";
+    const TOPIC_CMD   = "hub_7f3b9c2a8e/cmd";
+    const TOPIC_STATE = "hub_7f3b9c2a8e/state";
+    const AUTH_TOKEN  = "sec_k8912xL90";
+
+    let client = null;
+
+    function handleLogin() {
+      const entered = document.getElementById('pass-input').value;
+      if (entered === DASHBOARD_PASSCODE) {
+        sessionStorage.setItem('hub_auth', 'true');
+        showDashboard();
+      } else {
+        document.getElementById('login-error').style.display = 'block';
+      }
+    }
+
+    function handleLogout() {
+      sessionStorage.removeItem('hub_auth');
+      if (client) client.end();
+      location.reload();
+    }
+
+    function showDashboard() {
+      document.getElementById('login-view').style.display = 'none';
+      document.getElementById('dashboard-view').style.display = 'block';
+      initMQTT();
+    }
+
+    function initMQTT() {
+      client = mqtt.connect(MQTT_HOST, {
+        clientId: 'SecWeb_' + Math.random().toString(16).substr(2, 8),
+        clean: true
+      });
+
+      client.on('connect', () => {
+        const badge = document.getElementById('hub-status');
+        badge.innerText = 'Cloud Link Active';
+        badge.className = 'badge online';
+        client.subscribe(TOPIC_STATE);
+        sendCmd("GET_STATUS");
+      });
+
+      client.on('offline', () => {
+        const badge = document.getElementById('hub-status');
+        badge.innerText = 'Link Offline';
+        badge.className = 'badge offline';
+      });
+
+      client.on('message', (topic, message) => {
+        const payload = message.toString();
+        const pairs = payload.split(',');
+        pairs.forEach(pair => {
+          const parts = pair.split(':');
+          const idx = parts[0].replace('R', '');
+          const state = parts[1] === '1';
+          const btn = document.getElementById('btn-' + idx);
+          if (btn) {
+            btn.innerText = state ? 'ON' : 'OFF';
+            btn.className = state ? 'btn btn-on' : 'btn btn-off';
+          }
+        });
+      });
+    }
+
+    function toggle(index) {
+      const btn = document.getElementById('btn-' + index);
+      if (btn) {
+        btn.innerText = '⏳ Syncing...';
+        btn.className = 'btn btn-wait';
+      }
+      sendCmd('TOGGLE:' + index);
+    }
+
+    function sendCmd(cmd) {
+      if (client && client.connected) {
+        client.publish(TOPIC_CMD, `${AUTH_TOKEN}|${cmd}`);
+      } else {
+        alert('Cloud link is currently disconnected.');
+      }
+    }
+
+    window.onload = () => {
+      if (sessionStorage.getItem('hub_auth') === 'true') showDashboard();
+    };
+  </script>
+</body>
+</html>
