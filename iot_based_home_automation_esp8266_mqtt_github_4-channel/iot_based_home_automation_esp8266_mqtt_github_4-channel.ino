@@ -9,7 +9,7 @@
 #define STR_MAX_LEN 32
 #define NAME_MAX_LEN 20
 
-// EEPROM Map
+// EEPROM Addresses
 #define ADDR_STATES    0
 #define ADDR_NAMES     4
 #define ADDR_STA_SSID  84
@@ -18,7 +18,7 @@
 #define ADDR_HTTP_PASS 180
 #define ADDR_AP_PASS   212
 
-// Default Fallback Configurations
+// Default Credentials
 const char* default_sta_ssid  = "Infinix";
 const char* default_sta_pass  = "1234567890";
 const char* default_http_user = "Infinix";
@@ -26,18 +26,19 @@ const char* default_http_pass = "1234567890";
 const char* ap_ssid           = "Infinix-Relay-Hub";
 const char* default_ap_pass   = "1234567890";
 
-// Cloud MQTT Configurations
+// Cloud MQTT Setup (Must match index.html)
 const char* mqtt_broker   = "broker.hivemq.com";
 const int   mqtt_port     = 1883;
 const char* TOPIC_COMMAND = "hub_7f3b9c2a8e/cmd";
 const char* TOPIC_STATE   = "hub_7f3b9c2a8e/state";
 const char* AUTH_TOKEN    = "sec_k8912xL90";
 
-// Runtime Variables
+// Pins: D1, D2, D7, D6
+const int relayPins[4] = {5, 4, 13, 12};
+bool relayStates[4]    = {false, false, false, false};
+String relayNames[4]   = {"Light", "Fan", "TV", "Socket"};
+
 String sta_ssid, sta_pass, http_user, http_pass, ap_pass;
-const int relayPins[4] = {5, 4, 13, 12}; // Verified: D1, D2, D7, D6
-bool relayStates[4] = {false, false, false, false};
-String relayNames[4] = {"Light", "Fan", "TV", "Socket"};
 
 #define RELAY_ON  LOW
 #define RELAY_OFF HIGH
@@ -51,158 +52,37 @@ unsigned long lastMqttRetry = 0;
 bool shouldReboot = false;
 unsigned long rebootTimer = 0;
 
-// Embedded Local Web UI
+// Embedded Local Offline Web Interface
 const char index_html[] PROGMEM = R"rawliteral(
 <!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Smart Hybrid Hub</title>
+  <title>Smart Relay Hub</title>
   <style>
-    body {
-      font-family: Arial, sans-serif;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      min-height: 90vh;
-      background: #f0f2f5;
-      margin: 0;
-      padding: 1rem;
-    }
-    .card {
-      background: #ffffff;
-      padding: 1.8rem;
-      border-radius: 12px;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-      text-align: center;
-      width: 100%;
-      max-width: 360px;
-      position: relative;
-    }
-    .top-bar {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 1.2rem;
-    }
-    .badge {
-      padding: 4px 8px;
-      border-radius: 4px;
-      font-size: 0.8rem;
-    }
+    body { font-family: Arial, sans-serif; display: flex; justify-content: center; align-items: center; min-height: 90vh; background: #f0f2f5; margin: 0; padding: 1rem; }
+    .card { background: #ffffff; padding: 1.8rem; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); text-align: center; width: 100%; max-width: 360px; position: relative; }
+    .top-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.2rem; }
+    .badge { padding: 4px 8px; border-radius: 4px; font-size: 0.8rem; }
     .connected { background: #d4edda; color: #155724; }
     .disconnected { background: #f8d7da; color: #721c24; }
-    .btn-settings-icon {
-      background: transparent;
-      border: none;
-      font-size: 1.2rem;
-      cursor: pointer;
-    }
-    .master-controls {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 10px;
-      margin-bottom: 1.2rem;
-    }
-    .btn-master-on {
-      background: #28a745;
-      color: #fff;
-      padding: 0.75rem;
-      border-radius: 6px;
-      font-weight: bold;
-      border: none;
-      cursor: pointer;
-      font-size: 0.9rem;
-    }
-    .btn-master-off {
-      background: #dc3545;
-      color: #fff;
-      padding: 0.75rem;
-      border-radius: 6px;
-      font-weight: bold;
-      border: none;
-      cursor: pointer;
-      font-size: 0.9rem;
-    }
-    .relay-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 12px;
-    }
-    .relay-item {
-      background: #f8f9fa;
-      padding: 0.9rem;
-      border-radius: 8px;
-      border: 1px solid #e9ecef;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-    }
-    .title-wrapper {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 5px;
-      width: 100%;
-      margin-bottom: 8px;
-    }
-    .relay-title {
-      font-weight: bold;
-      font-size: 0.95rem;
-      color: #333;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-      max-width: 100px;
-    }
-    .btn-rename {
-      background: transparent;
-      border: none;
-      cursor: pointer;
-      font-size: 0.8rem;
-      opacity: 0.6;
-      padding: 0;
-    }
-    .btn {
-      width: 100%;
-      padding: 0.6rem;
-      font-size: 0.9rem;
-      font-weight: bold;
-      border: none;
-      border-radius: 6px;
-      cursor: pointer;
-      transition: background 0.2s;
-    }
+    .btn-settings-icon { background: transparent; border: none; font-size: 1.2rem; cursor: pointer; }
+    .master-controls { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 1.2rem; }
+    .btn-master-on { background: #28a745; color: #fff; padding: 0.75rem; border-radius: 6px; font-weight: bold; border: none; cursor: pointer; font-size: 0.9rem; }
+    .btn-master-off { background: #dc3545; color: #fff; padding: 0.75rem; border-radius: 6px; font-weight: bold; border: none; cursor: pointer; font-size: 0.9rem; }
+    .relay-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .relay-item { background: #f8f9fa; padding: 0.9rem; border-radius: 8px; border: 1px solid #e9ecef; display: flex; flex-direction: column; align-items: center; }
+    .title-wrapper { display: flex; align-items: center; justify-content: center; gap: 5px; width: 100%; margin-bottom: 8px; }
+    .relay-title { font-weight: bold; font-size: 0.95rem; color: #333; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100px; }
+    .btn-rename { background: transparent; border: none; cursor: pointer; font-size: 0.8rem; opacity: 0.6; padding: 0; }
+    .btn { width: 100%; padding: 0.6rem; font-size: 0.9rem; font-weight: bold; border: none; border-radius: 6px; cursor: pointer; transition: background 0.2s; }
     .btn-off { background: #6c757d; color: white; }
     .btn-on { background: #007bff; color: white; }
-    .btn-pending { 
-      background: #ffc107; 
-      color: #212529; 
-      cursor: not-allowed; 
-      animation: pulse 1s infinite alternate;
-    }
+    .btn-pending { background: #ffc107; color: #212529; cursor: not-allowed; animation: pulse 1s infinite alternate; }
     @keyframes pulse { from { opacity: 0.7; } to { opacity: 1; } }
-
-    /* Modal */
-    .modal {
-      display: none;
-      position: fixed;
-      top: 0; left: 0;
-      width: 100%; height: 100%;
-      background: rgba(0,0,0,0.5);
-      justify-content: center;
-      align-items: center;
-      z-index: 100;
-    }
-    .modal-content {
-      background: #fff;
-      padding: 1.5rem;
-      border-radius: 10px;
-      width: 90%;
-      max-width: 320px;
-      text-align: left;
-    }
+    .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); justify-content: center; align-items: center; z-index: 100; }
+    .modal-content { background: #fff; padding: 1.5rem; border-radius: 10px; width: 90%; max-width: 320px; text-align: left; }
     .modal-content h3 { margin-top: 0; }
     .form-group { margin-bottom: 10px; }
     .form-group label { display: block; font-size: 0.8rem; color: #555; margin-bottom: 3px; }
@@ -218,41 +98,26 @@ const char index_html[] PROGMEM = R"rawliteral(
       <span id="conn-status" class="badge disconnected">Disconnected</span>
       <button class="btn-settings-icon" onclick="openSettings()">⚙️</button>
     </div>
-
-    <h2>Smart Hybrid Hub</h2>
-    
+    <h2>Smart Relay Hub</h2>
     <div class="master-controls">
       <button id="btn-master-on" class="btn-master-on" onclick="setAll(1)">ALL ON</button>
       <button id="btn-master-off" class="btn-master-off" onclick="setAll(0)">ALL OFF</button>
     </div>
-
     <div class="relay-grid">
       <div class="relay-item">
-        <div class="title-wrapper">
-          <span id="title-0" class="relay-title">Relay 1</span>
-          <button class="btn-rename" onclick="editName(0)">✏️</button>
-        </div>
+        <div class="title-wrapper"><span id="title-0" class="relay-title">Relay 1</span><button class="btn-rename" onclick="editName(0)">✏️</button></div>
         <button id="btn-0" class="btn btn-off" onclick="toggleRelay(0)">OFF</button>
       </div>
       <div class="relay-item">
-        <div class="title-wrapper">
-          <span id="title-1" class="relay-title">Relay 2</span>
-          <button class="btn-rename" onclick="editName(1)">✏️</button>
-        </div>
+        <div class="title-wrapper"><span id="title-1" class="relay-title">Relay 2</span><button class="btn-rename" onclick="editName(1)">✏️</button></div>
         <button id="btn-1" class="btn btn-off" onclick="toggleRelay(1)">OFF</button>
       </div>
       <div class="relay-item">
-        <div class="title-wrapper">
-          <span id="title-2" class="relay-title">Relay 3</span>
-          <button class="btn-rename" onclick="editName(2)">✏️</button>
-        </div>
+        <div class="title-wrapper"><span id="title-2" class="relay-title">Relay 3</span><button class="btn-rename" onclick="editName(2)">✏️</button></div>
         <button id="btn-2" class="btn btn-off" onclick="toggleRelay(2)">OFF</button>
       </div>
       <div class="relay-item">
-        <div class="title-wrapper">
-          <span id="title-3" class="relay-title">Relay 4</span>
-          <button class="btn-rename" onclick="editName(3)">✏️</button>
-        </div>
+        <div class="title-wrapper"><span id="title-3" class="relay-title">Relay 4</span><button class="btn-rename" onclick="editName(3)">✏️</button></div>
         <button id="btn-3" class="btn btn-off" onclick="toggleRelay(3)">OFF</button>
       </div>
     </div>
@@ -261,22 +126,10 @@ const char index_html[] PROGMEM = R"rawliteral(
   <div id="settings-modal" class="modal">
     <div class="modal-content">
       <h3>Wi-Fi & Security Setup</h3>
-      <div class="form-group">
-        <label>Home Wi-Fi SSID</label>
-        <input type="text" id="cfg-sta-ssid">
-      </div>
-      <div class="form-group">
-        <label>Home Wi-Fi Password</label>
-        <input type="password" id="cfg-sta-pass">
-      </div>
-      <div class="form-group">
-        <label>Web Login Username</label>
-        <input type="text" id="cfg-user">
-      </div>
-      <div class="form-group">
-        <label>Web Login Password</label>
-        <input type="password" id="cfg-pass">
-      </div>
+      <div class="form-group"><label>Home Wi-Fi SSID</label><input type="text" id="cfg-sta-ssid"></div>
+      <div class="form-group"><label>Home Wi-Fi Password</label><input type="password" id="cfg-sta-pass"></div>
+      <div class="form-group"><label>Web Login Username</label><input type="text" id="cfg-user"></div>
+      <div class="form-group"><label>Web Login Password</label><input type="password" id="cfg-pass"></div>
       <div class="modal-actions">
         <button class="btn-save" onclick="saveSettings()">Save & Reboot</button>
         <button class="btn-close" onclick="closeSettings()">Cancel</button>
@@ -290,46 +143,37 @@ const char index_html[] PROGMEM = R"rawliteral(
 
     function initWebSocket() {
       websocket = new WebSocket(gateway);
-
       websocket.onopen = function() {
         var badge = document.getElementById('conn-status');
         badge.innerText = 'Local Connected';
         badge.className = 'badge connected';
       };
-
       websocket.onclose = function() {
         var badge = document.getElementById('conn-status');
         badge.innerText = 'Disconnected';
         badge.className = 'badge disconnected';
         setTimeout(initWebSocket, 2000);
       };
-
       websocket.onmessage = function(event) {
         var data = event.data;
         if (data.startsWith('ACK:')) {
           var parts = data.substring(4).split(':');
           updateButtonUI(parts[0], parts[1] === '1');
-        }
-        else if (data.startsWith('ACK_ALL:')) {
+        } else if (data.startsWith('ACK_ALL:')) {
           var states = data.substring(8).split(',');
           states.forEach(function(item) {
             var parts = item.split(':');
             updateButtonUI(parts[0], parts[1] === '1');
           });
           resetMasterButtons();
-        }
-        else if (data.startsWith('SYNC:')) {
+        } else if (data.startsWith('SYNC:')) {
           var sections = data.substring(5).split('|');
-          var statesPart = sections[0];
-          var namesPart = sections[1];
-
-          var pairs = statesPart.split(',');
+          var pairs = sections[0].split(',');
           pairs.forEach(function(pair) {
             var parts = pair.split(':');
             updateButtonUI(parts[0].replace('R', ''), parts[1] === '1');
           });
-
-          var names = namesPart.split(',');
+          var names = sections[1].split(',');
           names.forEach(function(name, index) {
             var titleElem = document.getElementById('title-' + index);
             if (titleElem) titleElem.innerText = name;
@@ -395,12 +239,11 @@ const char index_html[] PROGMEM = R"rawliteral(
       var uPass = document.getElementById('cfg-pass').value.trim();
 
       if (!sSSID || !uUser || !uPass) {
-        alert('Please fill out SSID, Username, and Password.');
+        alert('Please fill out all fields.');
         return;
       }
-
       websocket.send('CFG:' + sSSID + '|' + sPass + '|' + uUser + '|' + uPass);
-      alert('Settings saved! Rebooting ESP8266...');
+      alert('Settings saved! Rebooting...');
       closeSettings();
     }
 
@@ -455,7 +298,6 @@ void notifyAllClients() {
   publishMqttState();
 }
 
-// Single Unified Execution Engine for both Local WebSockets and Cloud MQTT
 void executeRelayCommand(String command) {
   if (command.startsWith("TOGGLE:")) {
     int idx = command.substring(7).toInt();
@@ -492,7 +334,6 @@ void executeRelayCommand(String command) {
   }
 }
 
-// 1. MQTT Cloud Callback
 void mqttCallback(char* topic, byte* payload, unsigned int length) {
   String incoming = "";
   for (unsigned int i = 0; i < length; i++) incoming += (char)payload[i];
@@ -509,7 +350,6 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
   }
 }
 
-// 2. Local WebSocket Callback
 void handleWebSocketMessage(void *arg, uint8_t *data, size_t len) {
   AwsFrameInfo *info = (AwsFrameInfo*)arg;
   if (info->final && info->index == 0 && info->len == len && info->opcode == WS_TEXT) {
@@ -564,7 +404,6 @@ void setup() {
   Serial.begin(115200);
   EEPROM.begin(EEPROM_SIZE);
 
-  // Restore States
   for (int i = 0; i < 4; i++) {
     byte saved = EEPROM.read(ADDR_STATES + i);
     if (saved == 0xFF) { saved = 0; EEPROM.write(ADDR_STATES + i, 0); }
@@ -573,7 +412,6 @@ void setup() {
     digitalWrite(relayPins[i], relayStates[i] ? RELAY_ON : RELAY_OFF);
   }
 
-  // Restore Names & Config
   String defaults[4] = {"Light", "Fan", "TV", "Socket"};
   for (int i = 0; i < 4; i++) {
     relayNames[i] = readEEPROMString(ADDR_NAMES + (i * NAME_MAX_LEN), NAME_MAX_LEN, defaults[i]);
@@ -585,19 +423,15 @@ void setup() {
   ap_pass   = readEEPROMString(ADDR_AP_PASS, STR_MAX_LEN, default_ap_pass);
   EEPROM.commit();
 
-  // Dual Mode Wi-Fi Setup
   WiFi.persistent(false);
   WiFi.mode(WIFI_AP_STA);
   WiFi.softAP(ap_ssid, ap_pass.c_str());
-  Serial.print("\nAP Hotspot Online: http://");
-  Serial.println(WiFi.softAPIP()); // Always 192.168.4.1
 
   WiFi.setAutoReconnect(true);
   WiFi.begin(sta_ssid.c_str(), sta_pass.c_str());
 
   if (MDNS.begin("infinix")) MDNS.addService("http", "tcp", 80);
 
-  // Start Web Server & Local WebSocket
   ws.setAuthentication(http_user.c_str(), http_pass.c_str());
   ws.onEvent(onEvent);
   server.addHandler(&ws);
@@ -611,7 +445,6 @@ void setup() {
 
   server.begin();
 
-  // Cloud MQTT Client Setup
   mqtt.setServer(mqtt_broker, mqtt_port);
   mqtt.setCallback(mqttCallback);
 }
@@ -620,14 +453,12 @@ void loop() {
   MDNS.update();
   ws.cleanupClients();
 
-  // Background Cloud MQTT Handler (Only connects if STA has an internet IP)
   if (WiFi.status() == WL_CONNECTED) {
     if (!mqtt.connected()) {
       if (millis() - lastMqttRetry > 5000) {
         lastMqttRetry = millis();
         String cId = "ESPHybrid-" + String(random(0xffff), HEX);
         if (mqtt.connect(cId.c_str())) {
-          Serial.println("Cloud MQTT Connected!");
           mqtt.subscribe(TOPIC_COMMAND);
           publishMqttState();
         }

@@ -33,7 +33,7 @@
     <div id="login-view">
       <h2>🔐 Secure Cloud Panel</h2>
       <p style="color:#666; font-size:0.9rem;">Enter passcode to access worldwide.</p>
-      <input type="password" id="pass-input" placeholder="Passcode (Default: 1234567890)">
+      <input type="password" id="pass-input" placeholder="Enter Passcode">
       <button onclick="handleLogin()">Login</button>
       <div id="login-error" class="error-text">Invalid Passcode!</div>
     </div>
@@ -73,7 +73,7 @@
   </div>
 
   <script>
-    const DASHBOARD_PASSCODE = "1234567890";
+    const DASHBOARD_PASSCODE = "1234567890"; // Your private passcode
     const MQTT_HOST   = "wss://broker.hivemq.com:8884/mqtt";
     const TOPIC_CMD   = "hub_7f3b9c2a8e/cmd";
     const TOPIC_STATE = "hub_7f3b9c2a8e/state";
@@ -111,7 +111,7 @@
 
       client.on('connect', () => {
         const badge = document.getElementById('hub-status');
-        badge.innerText = 'Cloud Link Active';
+        badge.innerText = 'Cloud Connected';
         badge.className = 'badge online';
         client.subscribe(TOPIC_STATE);
         sendCmd("GET_STATUS");
@@ -119,7 +119,7 @@
 
       client.on('offline', () => {
         const badge = document.getElementById('hub-status');
-        badge.innerText = 'Link Offline';
+        badge.innerText = 'Cloud Disconnected';
         badge.className = 'badge offline';
       });
 
