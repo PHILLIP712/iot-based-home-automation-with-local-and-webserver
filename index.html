@@ -2,28 +2,38 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Global Smart Hub</title>
+  
+  <!-- PWA & Mobile Meta Tags -->
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#007bff">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="RelayHub">
+  <link rel="apple-touch-icon" href="https://img.icons8.com/fluency/192/smart-home.png">
+
   <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
   <style>
-    * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-    body { background: #f0f2f5; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; padding: 1rem; }
-    .card { background: #fff; width: 100%; max-width: 380px; padding: 2rem; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); text-align: center; }
+    * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; -webkit-tap-highlight-color: transparent; }
+    body { background: #f0f2f5; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; padding: 1rem; user-select: none; }
+    .card { background: #fff; width: 100%; max-width: 380px; padding: 2rem; border-radius: 16px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); text-align: center; }
     .badge { display: inline-block; padding: 4px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: bold; margin-bottom: 1rem; }
     .online { background: #d4edda; color: #155724; }
     .offline { background: #f8d7da; color: #721c24; }
     .master-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 1.2rem; }
-    .btn-m-on { background: #28a745; color: #fff; border: none; padding: 10px; border-radius: 6px; font-weight: bold; cursor: pointer; }
-    .btn-m-off { background: #dc3545; color: #fff; border: none; padding: 10px; border-radius: 6px; font-weight: bold; cursor: pointer; }
+    .btn-m-on { background: #28a745; color: #fff; border: none; padding: 12px; border-radius: 8px; font-weight: bold; cursor: pointer; }
+    .btn-m-off { background: #dc3545; color: #fff; border: none; padding: 12px; border-radius: 8px; font-weight: bold; cursor: pointer; }
     .relay-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-    .relay-box { background: #f8f9fa; border: 1px solid #e9ecef; border-radius: 8px; padding: 1rem; }
+    .relay-box { background: #f8f9fa; border: 1px solid #e9ecef; border-radius: 10px; padding: 1rem; }
     .relay-title { font-weight: bold; margin-bottom: 8px; font-size: 0.9rem; }
-    .btn { width: 100%; padding: 8px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; transition: 0.2s; }
+    .btn { width: 100%; padding: 10px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; transition: 0.2s; font-size: 0.95rem; }
     .btn-off { background: #6c757d; color: #fff; }
     .btn-on { background: #007bff; color: #fff; }
     .btn-wait { background: #ffc107; color: #000; cursor: wait; }
-    #login-view input { width: 100%; padding: 12px; margin: 10px 0; border: 1px solid #ccc; border-radius: 6px; font-size: 1rem; }
-    #login-view button { width: 100%; padding: 12px; background: #007bff; color: #fff; border: none; border-radius: 6px; font-size: 1rem; font-weight: bold; cursor: pointer; }
+    #login-view input { width: 100%; padding: 14px; margin: 12px 0; border: 1px solid #ccc; border-radius: 8px; font-size: 1rem; }
+    #login-view button { width: 100%; padding: 14px; background: #007bff; color: #fff; border: none; border-radius: 8px; font-size: 1rem; font-weight: bold; cursor: pointer; }
     .error-text { color: #dc3545; font-size: 0.85rem; margin-top: 8px; display: none; }
   </style>
 </head>
@@ -41,7 +51,7 @@
     <div id="dashboard-view" style="display: none;">
       <div style="display:flex; justify-content:space-between; align-items:center;">
         <span id="hub-status" class="badge offline">Connecting...</span>
-        <button onclick="handleLogout()" style="background:none; border:none; color:#dc3545; cursor:pointer; font-size:0.8rem;">Logout</button>
+        <button onclick="handleLogout()" style="background:none; border:none; color:#dc3545; cursor:pointer; font-size:0.85rem;">Logout</button>
       </div>
 
       <h2>Smart Hybrid Hub</h2>
@@ -73,13 +83,20 @@
   </div>
 
   <script>
-    const DASHBOARD_PASSCODE = "1234567890"; // Your private passcode
+    const DASHBOARD_PASSCODE = "1234567890";
     const MQTT_HOST   = "wss://broker.hivemq.com:8884/mqtt";
     const TOPIC_CMD   = "hub_7f3b9c2a8e/cmd";
     const TOPIC_STATE = "hub_7f3b9c2a8e/state";
     const AUTH_TOKEN  = "sec_k8912xL90";
 
     let client = null;
+
+    // Service Worker Registration for PWA
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js').catch(err => console.log('SW reg fail:', err));
+      });
+    }
 
     function handleLogin() {
       const entered = document.getElementById('pass-input').value;
