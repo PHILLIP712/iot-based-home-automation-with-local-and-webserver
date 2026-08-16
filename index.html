@@ -42,6 +42,7 @@
 <body>
 
   <div class="card">
+    <!-- Login Screen -->
     <div id="login-view">
       <h2>🔐 Secure Cloud Panel</h2>
       <p style="color:#666; font-size:0.9rem;">Enter Admin or Guest passcode.</p>
@@ -50,6 +51,7 @@
       <div id="login-error" class="error-text">Invalid Passcode!</div>
     </div>
 
+    <!-- Dashboard Screen -->
     <div id="dashboard-view" style="display: none;">
       <div style="display:flex; justify-content:space-between; align-items:center;">
         <span id="hub-status" class="badge offline">Connecting...</span>
@@ -165,7 +167,6 @@
         document.getElementById('hub-status').innerText = 'Disconnected';
       });
       client.on('message', (topic, message) => {
-        // Format: "R0:1:L0,R1:0:L1,R2:0:L0,R3:1:L0"
         const items = message.toString().split(',');
         items.forEach((item, idx) => {
           const parts = item.split(':');
@@ -174,11 +175,9 @@
           relayStates[idx] = isStateOn;
           lockStates[idx] = isLocked;
 
-          // Update lock buttons
           const lockBtn = document.getElementById('lock-icon-' + idx);
           if (lockBtn) lockBtn.innerText = isLocked ? '🔒' : '🔓';
 
-          // Update relay action buttons
           const btn = document.getElementById('btn-' + idx);
           if (btn) {
             if (currentRole === 'GUEST' && isLocked) {

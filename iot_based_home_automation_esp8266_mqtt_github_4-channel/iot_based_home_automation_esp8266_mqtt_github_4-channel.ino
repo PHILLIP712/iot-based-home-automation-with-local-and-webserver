@@ -5,21 +5,22 @@
 #include <PubSubClient.h>
 #include <EEPROM.h>
 
-#define EEPROM_SIZE 256
+#define EEPROM_SIZE 300
 #define STR_MAX_LEN 32
 #define NAME_MAX_LEN 20
 
 // EEPROM Map
 #define ADDR_STATES     0   // 4 bytes (0-3)
-#define ADDR_LOCKS      4   // 4 bytes (4-7) Child locks
-#define ADDR_NAMES      8   // 4 * 20 bytes (8-87)
-#define ADDR_STA_SSID   88
-#define ADDR_STA_PASS   120
-#define ADDR_ADMIN_USER 152
-#define ADDR_ADMIN_PASS 184
-#define ADDR_GUEST_PASS 216
+#define ADDR_LOCKS      4   // 4 bytes (4-7)
+#define ADDR_NAMES      8   // 80 bytes (8-87)
+#define ADDR_STA_SSID   88  // 32 bytes (88-119)
+#define ADDR_STA_PASS   120 // 32 bytes (120-151)
+#define ADDR_ADMIN_USER 152 // 32 bytes (152-183)
+#define ADDR_ADMIN_PASS 184 // 32 bytes (184-215)
+#define ADDR_GUEST_PASS 216 // 32 bytes (216-247)
+#define ADDR_AP_PASS    248 // 32 bytes (248-279)
 
-// Default Fallbacks
+// Default Configurations
 const char* default_sta_ssid   = "Infinix";
 const char* default_sta_pass   = "1234567890";
 const char* default_admin_user = "admin";
@@ -28,14 +29,14 @@ const char* default_guest_pass = "GUEST123";
 const char* ap_ssid            = "Infinix-Relay-Hub";
 const char* default_ap_pass    = "1234567890";
 
-// Cloud MQTT
+// Cloud MQTT Credentials
 const char* mqtt_broker   = "broker.hivemq.com";
 const int   mqtt_port     = 1883;
 const char* TOPIC_COMMAND = "hub_7f3b9c2a8e/cmd";
 const char* TOPIC_STATE   = "hub_7f3b9c2a8e/state";
 const char* AUTH_TOKEN    = "sec_k8912xL90";
 
-// Pins: D1, D2, D7, D6
+// Hardware Pin Definition (D1, D2, D7, D6)
 const int relayPins[4] = {5, 4, 13, 12};
 bool relayStates[4]    = {false, false, false, false};
 bool childLocks[4]     = {false, false, false, false};
@@ -55,7 +56,7 @@ unsigned long lastMqttRetry = 0;
 bool shouldReboot = false;
 unsigned long rebootTimer = 0;
 
-// Embedded Local UI with OTA & Lock Controls
+// Local Embedded UI
 const char index_html[] PROGMEM = R"rawliteral(
 <!DOCTYPE html>
 <html>
@@ -70,7 +71,7 @@ const char index_html[] PROGMEM = R"rawliteral(
     .badge { padding: 4px 8px; border-radius: 4px; font-size: 0.8rem; }
     .connected { background: #d4edda; color: #155724; }
     .disconnected { background: #f8d7da; color: #721c24; }
-    .btn-icon { background: transparent; border: none; font-size: 1.2rem; cursor: pointer; }
+    .btn-icon { background: transparent; border: none; font-size: 1.2rem; cursor: pointer; text-decoration: none; }
     .master-controls { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 1.2rem; }
     .btn-master-on { background: #28a745; color: #fff; padding: 0.75rem; border-radius: 6px; font-weight: bold; border: none; cursor: pointer; }
     .btn-master-off { background: #dc3545; color: #fff; padding: 0.75rem; border-radius: 6px; font-weight: bold; border: none; cursor: pointer; }
@@ -81,7 +82,6 @@ const char index_html[] PROGMEM = R"rawliteral(
     .btn { width: 100%; padding: 0.6rem; font-size: 0.9rem; font-weight: bold; border: none; border-radius: 6px; cursor: pointer; }
     .btn-off { background: #6c757d; color: white; }
     .btn-on { background: #007bff; color: white; }
-    .btn-locked { background: #adb5bd; color: #495057; cursor: not-allowed; }
     .btn-pending { background: #ffc107; color: #212529; cursor: not-allowed; }
     .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); justify-content: center; align-items: center; z-index: 100; }
     .modal-content { background: #fff; padding: 1.5rem; border-radius: 10px; width: 90%; max-width: 320px; text-align: left; }
@@ -162,19 +162,16 @@ const char index_html[] PROGMEM = R"rawliteral(
       var data = event.data;
       if (data.startsWith('SYNC:')) {
         var parts = data.substring(5).split('|');
-        // States: R0:1,R1:0...
         parts[0].split(',').forEach(p => {
           var s = p.split(':');
           updateUI(s[0].replace('R',''), s[1] === '1');
         });
-        // Locks: L0:1,L1:0...
         parts[1].split(',').forEach(p => {
           var s = p.split(':');
           var idx = s[0].replace('L','');
           var locked = s[1] === '1';
           document.getElementById('lock-' + idx).innerText = locked ? '🔒' : '🔓';
         });
-        // Names
         parts[2].split(',').forEach((name, i) => {
           document.getElementById('title-' + i).innerText = name;
         });
@@ -209,7 +206,7 @@ const char index_html[] PROGMEM = R"rawliteral(
 </html>
 )rawliteral";
 
-// OTA Update Webpage HTML
+// Embedded OTA Upload UI
 const char ota_html[] PROGMEM = R"rawliteral(
 <!DOCTYPE html>
 <html>
@@ -243,19 +240,16 @@ void writeEEPROMString(int startAddr, int maxLen, const String& val) {
 
 String getFullPayload() {
   String payload = "SYNC:";
-  // States
   for (int i = 0; i < 4; i++) {
     payload += "R" + String(i) + ":" + String(relayStates[i] ? "1" : "0");
     if (i < 3) payload += ",";
   }
   payload += "|";
-  // Child Locks
   for (int i = 0; i < 4; i++) {
     payload += "L" + String(i) + ":" + String(childLocks[i] ? "1" : "0");
     if (i < 3) payload += ",";
   }
   payload += "|";
-  // Names
   for (int i = 0; i < 4; i++) {
     payload += relayNames[i];
     if (i < 3) payload += ",";
@@ -406,13 +400,11 @@ void setup() {
   ws.onEvent(onEvent);
   server.addHandler(&ws);
 
-  // Main UI Endpoint
   server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
     if (!request->authenticate(admin_user.c_str(), admin_pass.c_str())) return request->requestAuthentication();
     request->send_P(200, "text/html", index_html);
   });
 
-  // OTA Web Firmware Updater Endpoints
   server.on("/update", HTTP_GET, [](AsyncWebServerRequest *request){
     if (!request->authenticate(admin_user.c_str(), admin_pass.c_str())) return request->requestAuthentication();
     request->send_P(200, "text/html", ota_html);
