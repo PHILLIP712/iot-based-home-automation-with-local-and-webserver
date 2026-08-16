@@ -1,5 +1,6 @@
-const CACHE_NAME = 'relay-hub-v1';
+const CACHE_NAME = 'relay-hub-v2';
 const ASSETS = [
+  './',
   './index.html',
   './manifest.json',
   'https://unpkg.com/mqtt/dist/mqtt.min.js'
@@ -25,8 +26,6 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('fetch', (event) => {
   event.respondWith(
-    caches.match(event.request).then((cachedResponse) => {
-      return cachedResponse || fetch(event.request);
-    })
+    caches.match(event.request).then((response) => response || fetch(event.request))
   );
 });
