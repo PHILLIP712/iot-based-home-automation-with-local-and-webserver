@@ -1,7 +1,0 @@
-const char* default_sta_ssid   = "Infinix";
-const char* default_sta_pass   = "1234567890";
-const char* default_admin_user = "admin";
-const char* default_admin_pass = "1234567890";
-const char* default_guest_pass = "GUEST123";
-const char* ap_ssid            = "Infinix-Relay-Hub";
-const char* default_ap_pass    = "1234567890";
