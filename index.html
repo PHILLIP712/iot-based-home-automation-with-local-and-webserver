@@ -5,13 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Global Smart Hub</title>
   
-  <!-- PWA & Mobile Meta Tags -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#007bff">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="RelayHub">
   <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/192/865/865969.png">
 
   <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
@@ -22,15 +20,19 @@
     .badge { display: inline-block; padding: 4px 10px; border-radius: 20px; font-size: 0.75rem; font-weight: bold; margin-bottom: 1rem; }
     .online { background: #d4edda; color: #155724; }
     .offline { background: #f8d7da; color: #721c24; }
+    .role-badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: bold; background: #e9ecef; }
     .master-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 1.2rem; }
     .btn-m-on { background: #28a745; color: #fff; border: none; padding: 12px; border-radius: 8px; font-weight: bold; cursor: pointer; }
     .btn-m-off { background: #dc3545; color: #fff; border: none; padding: 12px; border-radius: 8px; font-weight: bold; cursor: pointer; }
     .relay-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
     .relay-box { background: #f8f9fa; border: 1px solid #e9ecef; border-radius: 10px; padding: 1rem; }
-    .relay-title { font-weight: bold; margin-bottom: 8px; font-size: 0.9rem; }
+    .relay-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+    .relay-title { font-weight: bold; font-size: 0.9rem; }
+    .btn-lock { background: transparent; border: none; font-size: 0.95rem; cursor: pointer; }
     .btn { width: 100%; padding: 10px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; transition: 0.2s; font-size: 0.95rem; }
     .btn-off { background: #6c757d; color: #fff; }
     .btn-on { background: #007bff; color: #fff; }
+    .btn-locked { background: #ced4da; color: #6c757d; cursor: not-allowed; }
     .btn-wait { background: #ffc107; color: #000; cursor: wait; }
     #login-view input { width: 100%; padding: 14px; margin: 12px 0; border: 1px solid #ccc; border-radius: 8px; font-size: 1rem; }
     #login-view button { width: 100%; padding: 14px; background: #007bff; color: #fff; border: none; border-radius: 8px; font-size: 1rem; font-weight: bold; cursor: pointer; }
@@ -40,44 +42,57 @@
 <body>
 
   <div class="card">
-    <!-- Login Screen -->
     <div id="login-view">
       <h2>🔐 Secure Cloud Panel</h2>
-      <p style="color:#666; font-size:0.9rem;">Enter passcode to access worldwide.</p>
+      <p style="color:#666; font-size:0.9rem;">Enter Admin or Guest passcode.</p>
       <input type="password" id="pass-input" placeholder="Enter Passcode" onkeydown="if(event.key === 'Enter') handleLogin()">
       <button onclick="handleLogin()">Login</button>
       <div id="login-error" class="error-text">Invalid Passcode!</div>
     </div>
 
-    <!-- Dashboard Screen -->
     <div id="dashboard-view" style="display: none;">
       <div style="display:flex; justify-content:space-between; align-items:center;">
         <span id="hub-status" class="badge offline">Connecting...</span>
-        <button onclick="handleLogout()" style="background:none; border:none; color:#dc3545; cursor:pointer; font-size:0.85rem;">Logout</button>
+        <div>
+          <span id="user-role" class="role-badge">Admin</span>
+          <button onclick="handleLogout()" style="background:none; border:none; color:#dc3545; cursor:pointer; font-size:0.85rem;">Logout</button>
+        </div>
       </div>
 
       <h2>Smart Hybrid Hub</h2>
 
-      <div class="master-grid">
+      <div id="admin-master" class="master-grid">
         <button class="btn-m-on" onclick="sendCmd('ALL_ON')">ALL ON</button>
         <button class="btn-m-off" onclick="sendCmd('ALL_OFF')">ALL OFF</button>
       </div>
 
       <div class="relay-grid">
         <div class="relay-box">
-          <div class="relay-title">💡 Light</div>
+          <div class="relay-header">
+            <span class="relay-title">💡 Light</span>
+            <button id="lock-icon-0" class="btn-lock" onclick="toggleLock(0)">🔓</button>
+          </div>
           <button id="btn-0" class="btn btn-off" onclick="toggle(0)">OFF</button>
         </div>
         <div class="relay-box">
-          <div class="relay-title">🌀 Fan</div>
+          <div class="relay-header">
+            <span class="relay-title">🌀 Fan</span>
+            <button id="lock-icon-1" class="btn-lock" onclick="toggleLock(1)">🔓</button>
+          </div>
           <button id="btn-1" class="btn btn-off" onclick="toggle(1)">OFF</button>
         </div>
         <div class="relay-box">
-          <div class="relay-title">📺 TV</div>
+          <div class="relay-header">
+            <span class="relay-title">📺 TV</span>
+            <button id="lock-icon-2" class="btn-lock" onclick="toggleLock(2)">🔓</button>
+          </div>
           <button id="btn-2" class="btn btn-off" onclick="toggle(2)">OFF</button>
         </div>
         <div class="relay-box">
-          <div class="relay-title">🔌 Socket</div>
+          <div class="relay-header">
+            <span class="relay-title">🔌 Socket</span>
+            <button id="lock-icon-3" class="btn-lock" onclick="toggleLock(3)">🔓</button>
+          </div>
           <button id="btn-3" class="btn btn-off" onclick="toggle(3)">OFF</button>
         </div>
       </div>
@@ -85,25 +100,32 @@
   </div>
 
   <script>
-    const DASHBOARD_PASSCODE = "1234567890";
+    const PASSCODE_ADMIN = "1234567890";
+    const PASSCODE_GUEST = "GUEST123";
+
     const MQTT_HOST   = "wss://broker.hivemq.com:8884/mqtt";
     const TOPIC_CMD   = "hub_7f3b9c2a8e/cmd";
     const TOPIC_STATE = "hub_7f3b9c2a8e/state";
     const AUTH_TOKEN  = "sec_k8912xL90";
 
+    let currentRole = "GUEST";
     let client = null;
+    let lockStates = [false, false, false, false];
+    let relayStates = [false, false, false, false];
 
-    // Register Service Worker for PWA
     if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js').catch(err => console.log('SW reg fail:', err));
-      });
+      window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js'));
     }
 
     function handleLogin() {
       const entered = document.getElementById('pass-input').value;
-      if (entered === DASHBOARD_PASSCODE) {
-        sessionStorage.setItem('hub_auth', 'true');
+      if (entered === PASSCODE_ADMIN) {
+        currentRole = "ADMIN";
+        sessionStorage.setItem('hub_role', 'ADMIN');
+        showDashboard();
+      } else if (entered === PASSCODE_GUEST) {
+        currentRole = "GUEST";
+        sessionStorage.setItem('hub_role', 'GUEST');
         showDashboard();
       } else {
         document.getElementById('login-error').style.display = 'block';
@@ -111,7 +133,7 @@
     }
 
     function handleLogout() {
-      sessionStorage.removeItem('hub_auth');
+      sessionStorage.clear();
       if (client) client.end();
       location.reload();
     }
@@ -119,64 +141,85 @@
     function showDashboard() {
       document.getElementById('login-view').style.display = 'none';
       document.getElementById('dashboard-view').style.display = 'block';
+      document.getElementById('user-role').innerText = currentRole;
+
+      if (currentRole === "GUEST") {
+        document.getElementById('admin-master').style.display = 'none';
+        for (let i = 0; i < 4; i++) {
+          document.getElementById('lock-icon-' + i).style.display = 'none';
+        }
+      }
       initMQTT();
     }
 
     function initMQTT() {
-      client = mqtt.connect(MQTT_HOST, {
-        clientId: 'SecWeb_' + Math.random().toString(16).substr(2, 8),
-        clean: true
-      });
-
+      client = mqtt.connect(MQTT_HOST, { clientId: 'SecWeb_' + Math.random().toString(16).substr(2, 8), clean: true });
       client.on('connect', () => {
-        const badge = document.getElementById('hub-status');
-        badge.innerText = 'Cloud Connected';
-        badge.className = 'badge online';
+        document.getElementById('hub-status').className = 'badge online';
+        document.getElementById('hub-status').innerText = 'Cloud Connected';
         client.subscribe(TOPIC_STATE);
         sendCmd("GET_STATUS");
       });
-
       client.on('offline', () => {
-        const badge = document.getElementById('hub-status');
-        badge.innerText = 'Cloud Disconnected';
-        badge.className = 'badge offline';
+        document.getElementById('hub-status').className = 'badge offline';
+        document.getElementById('hub-status').innerText = 'Disconnected';
       });
-
       client.on('message', (topic, message) => {
-        const payload = message.toString();
-        const pairs = payload.split(',');
-        pairs.forEach(pair => {
-          const parts = pair.split(':');
-          const idx = parts[0].replace('R', '');
-          const state = parts[1] === '1';
+        // Format: "R0:1:L0,R1:0:L1,R2:0:L0,R3:1:L0"
+        const items = message.toString().split(',');
+        items.forEach((item, idx) => {
+          const parts = item.split(':');
+          const isStateOn = parts[1] === '1';
+          const isLocked = parts[2] === 'L1';
+          relayStates[idx] = isStateOn;
+          lockStates[idx] = isLocked;
+
+          // Update lock buttons
+          const lockBtn = document.getElementById('lock-icon-' + idx);
+          if (lockBtn) lockBtn.innerText = isLocked ? '🔒' : '🔓';
+
+          // Update relay action buttons
           const btn = document.getElementById('btn-' + idx);
           if (btn) {
-            btn.innerText = state ? 'ON' : 'OFF';
-            btn.className = state ? 'btn btn-on' : 'btn btn-off';
+            if (currentRole === 'GUEST' && isLocked) {
+              btn.innerText = '🔒 Locked';
+              btn.className = 'btn btn-locked';
+              btn.disabled = true;
+            } else {
+              btn.innerText = isStateOn ? 'ON' : 'OFF';
+              btn.className = isStateOn ? 'btn btn-on' : 'btn btn-off';
+              btn.disabled = false;
+            }
           }
         });
       });
     }
 
-    function toggle(index) {
-      const btn = document.getElementById('btn-' + index);
-      if (btn) {
-        btn.innerText = '⏳ Syncing...';
-        btn.className = 'btn btn-wait';
-      }
-      sendCmd('TOGGLE:' + index);
+    function toggle(idx) {
+      if (currentRole === 'GUEST' && lockStates[idx]) return;
+      const btn = document.getElementById('btn-' + idx);
+      btn.innerText = '⏳ Syncing...';
+      btn.className = 'btn btn-wait';
+      sendCmd('TOGGLE:' + idx);
+    }
+
+    function toggleLock(idx) {
+      if (currentRole !== 'ADMIN') return;
+      sendCmd('TOGGLE_LOCK:' + idx);
     }
 
     function sendCmd(cmd) {
       if (client && client.connected) {
-        client.publish(TOPIC_CMD, `${AUTH_TOKEN}|${cmd}`);
-      } else {
-        alert('Cloud link is currently disconnected.');
+        client.publish(TOPIC_CMD, `${AUTH_TOKEN}|${currentRole}|${cmd}`);
       }
     }
 
     window.onload = () => {
-      if (sessionStorage.getItem('hub_auth') === 'true') showDashboard();
+      const savedRole = sessionStorage.getItem('hub_role');
+      if (savedRole) {
+        currentRole = savedRole;
+        showDashboard();
+      }
     };
   </script>
 </body>
